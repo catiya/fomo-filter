@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Event Picker builder: fetches Santa Cruz County events from Good Times and
+"""FOMO Filter builder: fetches Santa Cruz County events from Good Times and
 Eventbrite and writes the website into ./site (index.html + events.json).
 
 Run by GitHub Actions every morning. To try it locally:

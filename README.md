@@ -1,4 +1,4 @@
-# Event Picker
+# FOMO Filter
 
 A web page listing events in Santa Cruz, Scotts Valley, Soquel, Capitola,
 Davenport, Aptos and Watsonville from **Good Times** and **Eventbrite**. Pick

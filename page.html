@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Events">
-<title>Event Picker</title>
+<meta name="apple-mobile-web-app-title" content="FOMO Filter">
+<title>FOMO Filter</title>
 <style>
 :root{--bg:#f6f5f2;--card:#fff;--ink:#1d1d1f;--mute:#6b6b70;--line:#e3e1dc;--acc:#0a66c2;--accbg:#e8f1fb;--sel:#fff8e1;--warn:#b54708}
 @media (prefers-color-scheme:dark){:root{--bg:#141416;--card:#1e1e21;--ink:#ececef;--mute:#9a9aa1;--line:#2e2e33;--acc:#5aa9ff;--accbg:#1b2a3d;--sel:#2b2614;--warn:#f79009}}
@@ -56,7 +56,7 @@ button:disabled{opacity:.45;cursor:default}
 <body>
 <header>
   <div class="top">
-    <h1>Event Picker</h1>
+    <h1>FOMO Filter</h1>
     <div class="sub"><span id="updated">Loading…</span> · <a id="refresh" href="#" target="_blank" rel="noopener">Refresh now</a></div>
   </div>
   <div id="warn"></div>
@@ -222,9 +222,9 @@ function fold(line){
 }
 function buildICS(events){
   const stamp = icsUtc(new Date().toISOString());
-  const L = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Event Picker//EN","CALSCALE:GREGORIAN","METHOD:PUBLISH"];
+  const L = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//FOMO Filter//EN","CALSCALE:GREGORIAN","METHOD:PUBLISH"];
   for(const e of events){
-    L.push("BEGIN:VEVENT", `UID:${e.id}@eventpicker`, `DTSTAMP:${stamp}`);
+    L.push("BEGIN:VEVENT", `UID:${e.id}@fomo-filter`, `DTSTAMP:${stamp}`);
     if(e.allDay){
       const d = e.start.slice(0,10);
       L.push(`DTSTART;VALUE=DATE:${d.replace(/-/g,"")}`, `DTEND;VALUE=DATE:${addDays(d,1).replace(/-/g,"")}`);
