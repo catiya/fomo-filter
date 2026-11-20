@@ -297,6 +297,10 @@ def main() -> None:
     with open(os.path.join(HERE, "page.html"), encoding="utf-8") as src, \
             open(os.path.join(out, "index.html"), "w", encoding="utf-8") as dst:
         dst.write(src.read())
+    vendor = os.path.join(HERE, "vendor")
+    for name in os.listdir(vendor):  # browser libraries the page loads (Claude SDK)
+        with open(os.path.join(vendor, name), "rb") as src, open(os.path.join(out, name), "wb") as dst:
+            dst.write(src.read())
     log(f"Wrote {out}/index.html and events.json")
     if not events:
         sys.exit("No events from any source; not publishing an empty page.")

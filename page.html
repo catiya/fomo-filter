@@ -50,6 +50,29 @@ button:disabled{opacity:.45;cursor:default}
   .dates input{flex:1;min-width:0;padding:7px 6px}
   .controls select{flex:1 1 30%;min-width:0}
 }
+.scanbtn{padding:7px 12px;font-size:14px}
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);padding:16px;width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 40px);overflow:auto}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+.dhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:17px}
+.dhead button{border:none;background:none;font-size:18px;padding:4px 8px}
+dialog p{margin:8px 0}
+.fine{font-size:13px;color:var(--mute)}
+.drow{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap}
+dialog input[type=password],dialog input[type=text],dialog input[type=url],dialog input[type=date],dialog input[type=time],dialog textarea{font:inherit;width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+dialog textarea{min-height:70px;resize:vertical}
+.pick{display:block;text-align:center;padding:22px;border:2px dashed var(--line);border-radius:12px;cursor:pointer;font-weight:600;color:var(--acc);margin:12px 0}
+#thumb{display:block;max-width:100%;max-height:260px;margin:0 auto 10px;border-radius:8px}
+.fcard{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+.fcard .hd{display:flex;gap:8px;align-items:center;font-weight:600;margin-bottom:8px}
+.fcard .hd input{width:20px;height:20px;accent-color:var(--acc)}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fgrid .full{grid-column:1/-1}
+.fgrid > div{min-width:0}
+dialog input,dialog textarea{min-width:0;max-width:100%}
+.fgrid label{font-size:12px;color:var(--mute);display:block;margin-bottom:2px}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:sp 1s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (hover:none){.desk{display:none}}
 .toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:8px;font-size:14px;max-width:90vw;display:none}
 </style>
 </head>
@@ -57,6 +80,7 @@ button:disabled{opacity:.45;cursor:default}
 <header>
   <div class="top">
     <h1>FOMO Filter</h1>
+    <button id="scanBtn" class="primary scanbtn">📷 Scan an event</button>
     <div class="sub"><span id="updated">Loading…</span> · <a id="refresh" href="#" target="_blank" rel="noopener">Refresh now</a></div>
   </div>
   <div id="warn"></div>
@@ -86,6 +110,40 @@ button:disabled{opacity:.45;cursor:default}
   <button id="add" class="primary">Add to Calendar</button>
 </div>
 <div class="toast" id="toast"></div>
+
+<dialog id="scan">
+  <div class="dhead"><b>Scan an event</b><button id="scanClose" aria-label="Close">✕</button></div>
+
+  <div id="keyView" hidden>
+    <p>Scanning uses Claude to read the picture. It needs your own Anthropic API key
+      (about 1–3¢ per scan). Get one at
+      <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</p>
+    <p class="fine">The key is saved only in this browser on this device and is sent only to Anthropic.</p>
+    <input type="password" id="keyIn" placeholder="sk-ant-…" autocomplete="off">
+    <div class="drow"><button id="keySave" class="primary">Save key</button></div>
+  </div>
+
+  <div id="pickView" hidden>
+    <p>Take a photo of a flyer, or pick a screenshot of an event (Facebook, Instagram, a website, a text…).
+      <span class="desk">On a computer you can also paste a screenshot here.</span></p>
+    <label class="pick"><input type="file" id="fileIn" accept="image/*" hidden>📷 Take photo or choose image</label>
+    <p class="fine"><a href="#" id="keyChange">Change or remove API key</a></p>
+  </div>
+
+  <div id="workView" hidden>
+    <img id="thumb" alt="Your picture">
+    <div id="status" class="fine"></div>
+  </div>
+
+  <div id="resultView" hidden>
+    <div id="found"></div>
+    <div class="drow">
+      <button id="scanAgain">Scan another</button>
+      <button id="scanAdd" class="primary">Add to Calendar</button>
+    </div>
+  </div>
+</dialog>
+
 <script>
 const TZ = "America/Los_Angeles";
 const $ = id => document.getElementById(id);
@@ -226,8 +284,8 @@ function buildICS(events){
   for(const e of events){
     L.push("BEGIN:VEVENT", `UID:${e.id}@fomo-filter`, `DTSTAMP:${stamp}`);
     if(e.allDay){
-      const d = e.start.slice(0,10);
-      L.push(`DTSTART;VALUE=DATE:${d.replace(/-/g,"")}`, `DTEND;VALUE=DATE:${addDays(d,1).replace(/-/g,"")}`);
+      const d = e.start.slice(0,10), last = e.end && e.end.length === 10 && e.end > d ? e.end : d;
+      L.push(`DTSTART;VALUE=DATE:${d.replace(/-/g,"")}`, `DTEND;VALUE=DATE:${addDays(last,1).replace(/-/g,"")}`);
     } else {
       L.push(`DTSTART:${icsUtc(e.start)}`); if(e.end) L.push(`DTEND:${icsUtc(e.end)}`);
     }
@@ -243,9 +301,8 @@ function buildICS(events){
 }
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
-$("add").onclick = () => {
-  const chosen = DATA.events.filter(e => sel.has(e.id));
-  const ics = buildICS(chosen);
+function deliverICS(events){
+  const ics = buildICS(events);
   if(isIOS){
     // Safari on iPhone opens calendar data directly and offers "Add All".
     location.href = "data:text/calendar;charset=utf-8," + encodeURIComponent(ics);
@@ -254,7 +311,237 @@ $("add").onclick = () => {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([ics], {type: "text/calendar"}));
   a.download = "events.ics"; document.body.appendChild(a); a.click(); a.remove();
-  toast(`Downloaded events.ics (${chosen.length} events). Open it to add them to Calendar.`);
+  toast(`Downloaded events.ics (${events.length} event${events.length === 1 ? "" : "s"}). Open it to add to Calendar.`);
+}
+$("add").onclick = () => deliverICS(DATA.events.filter(e => sel.has(e.id)));
+
+// ================================================================ scanning ==
+// Reads a photo or screenshot of an event with Claude and turns it into
+// calendar events. Uses the person's own API key, kept in this browser only.
+const SDK_URL = "./anthropic-sdk-1.6.0.mjs";   // vendor/, copied into the site by build.py
+const MODEL = "claude-opus-5-5";
+const KEY = "anthropicKey";
+const deviceTZ = Intl.DateTimeFormat().resolvedOptions().timeZone || TZ;
+const nul = t => ({type: [t, "null"]});
+const EVENT_SCHEMA = {
+  type: "object", additionalProperties: false, required: ["events", "note"],
+  properties: {
+    note: nul("string"),
+    events: {type: "array", items: {
+      type: "object", additionalProperties: false,
+      required: ["title","start_date","start_time","end_date","end_time","timezone","venue","address","host","description","url"],
+      properties: {
+        title: {type: "string"}, start_date: {type: "string"}, start_time: nul("string"),
+        end_date: nul("string"), end_time: nul("string"), timezone: nul("string"),
+        venue: nul("string"), address: nul("string"), host: nul("string"),
+        description: nul("string"), url: nul("string"),
+      }}},
+  },
+};
+function systemPrompt(){
+  const t = today();
+  const wd = new Intl.DateTimeFormat("en-US", {weekday: "long", timeZone: deviceTZ}).format(new Date());
+  return `You read pictures of events - photos of flyers and posters, and screenshots of event pages (Facebook, Instagram, Eventbrite, websites, messages) - and extract calendar details.
+
+Today is ${wd}, ${t}. The person's time zone is ${deviceTZ}.
+
+Rules:
+- Use only what the picture shows. Leave a field null rather than guess. Ignore ads, comments and other events that are only suggested in the margins.
+- start_date / end_date: YYYY-MM-DD. Resolve partial or relative dates ("Sat Dec 5", "this Friday", "tomorrow") to the next occurrence on or after today. Facebook shows dates like "SAT, DEC 5 AT 7 PM" or "Tomorrow at 8 PM".
+- start_time / end_time: 24-hour HH:MM, or null if no time is shown (an all-day event). If only a start time is shown, end_time is null. If the end is after midnight, set end_date to the next day.
+- timezone: an IANA name only when the picture states one or the place is clearly outside ${deviceTZ}; otherwise null.
+- venue: the place name. address: the street address and city if shown (on Facebook it is under the venue name).
+- host: the organizer ("Event by ..." on Facebook, "Presented by ...", "Hosted by ...").
+- description: one or two sentences in plain words, plus price and age limits if shown. If it repeats (e.g. "every Tuesday"), give the next date and say how it repeats here.
+- url: only a link or website written in the picture.
+- If the picture lists several separate events (a lineup with different dates, a monthly calendar), return each one. One event with several bands is one event.
+- If there is no event in the picture, return an empty events list and say why in note.`;
+}
+
+let scanned = [];
+function showView(name){
+  ["keyView","pickView","workView","resultView"].forEach(v => $(v).hidden = v !== name);
+}
+function openScan(){
+  showView(store.get(KEY, "") ? "pickView" : "keyView");
+  if(!$("scan").open) $("scan").showModal();
+}
+$("scanBtn").onclick = openScan;
+$("scanClose").onclick = () => $("scan").close();
+$("keySave").onclick = () => {
+  const k = $("keyIn").value.trim();
+  if(!/^sk-ant-/.test(k)){ alert("That doesn't look like an Anthropic API key (it starts with sk-ant-)."); return; }
+  store.set(KEY, k); $("keyIn").value = ""; showView("pickView");
+};
+$("keyChange").onclick = ev => {
+  ev.preventDefault();
+  if(confirm("Remove the saved API key from this browser?")){ try{ localStorage.removeItem(KEY); }catch(e){} showView("keyView"); }
+};
+$("scanAgain").onclick = () => { $("fileIn").value = ""; showView("pickView"); };
+$("fileIn").onchange = () => { const f = $("fileIn").files[0]; if(f) scanImage(f); };
+document.addEventListener("paste", ev => {
+  const item = [...(ev.clipboardData?.items || [])].find(i => i.type.startsWith("image/"));
+  if(!item) return;
+  ev.preventDefault(); openScan();
+  if(store.get(KEY, "")) scanImage(item.getAsFile());
+});
+
+// Shrink to Claude's preferred size (long edge 1568px) and convert to JPEG.
+async function prepareImage(file){
+  const url = URL.createObjectURL(file);
+  try{
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error("Couldn't open that image.")); i.src = url; });
+    const scale = Math.min(1, 1568 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+    const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+    g.drawImage(img, 0, 0, c.width, c.height);
+    const dataUrl = c.toDataURL("image/jpeg", 0.88);
+    return {preview: dataUrl, data: dataUrl.split(",")[1]};
+  } finally { URL.revokeObjectURL(url); }
+}
+
+async function scanImage(file){
+  showView("workView");
+  $("status").innerHTML = `<span class="spin"></span>Reading the picture… (about 5–15 seconds)`;
+  try{
+    const img = await prepareImage(file);
+    $("thumb").src = img.preview;
+    const result = await askClaude(img.data);
+    scanned = result.events.map(fromClaude);
+    renderFound(result.note);
+  }catch(err){
+    $("status").innerHTML = `<span style="color:var(--warn)">${esc(err.message || String(err))}</span>
+      <div class="drow"><button onclick="showView('pickView')">Try again</button></div>`;
+  }
+}
+
+async function askClaude(base64){
+  let Anthropic;
+  try{ ({default: Anthropic} = await import(SDK_URL)); }
+  catch(e){ throw new Error("Couldn't load the Claude library. Check your internet connection."); }
+  const client = new Anthropic({apiKey: store.get(KEY, ""), dangerouslyAllowBrowser: true, maxRetries: 2});
+  const params = {
+    model: MODEL,
+    max_tokens: 16000,
+    system: systemPrompt(),
+    output_config: {effort: "low", format: {type: "json_schema", schema: EVENT_SCHEMA}},
+    messages: [{role: "user", content: [
+      {type: "image", source: {type: "base64", media_type: "image/jpeg", data: base64}},
+      {type: "text", text: "Extract the event details from this picture."},
+    ]}],
+  };
+  let msg;
+  try{
+    // If a safety check declines, the API retries on another model automatically.
+    msg = await client.beta.messages.create({...params, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default"});
+  }catch(err){
+    if(err instanceof Anthropic.BadRequestError && /fallback/i.test(err.message || "")){
+      msg = await client.messages.create(params);           // fallback option not accepted: plain request
+    } else throw friendlyError(err, Anthropic);
+  }
+  if(msg.stop_reason === "refusal") throw new Error("Claude declined to read this picture. Try a different photo or screenshot.");
+  if(msg.stop_reason === "max_tokens") throw new Error("The answer was cut off. Try cropping the picture to just the event.");
+  const text = msg.content.filter(b => b.type === "text").map(b => b.text).join("");
+  try{ return JSON.parse(text); }
+  catch(e){ throw new Error("Couldn't understand Claude's answer. Please try again."); }
+}
+
+function friendlyError(err, Anthropic){
+  if(err instanceof Anthropic.AuthenticationError) return new Error("Anthropic didn't accept the API key. Use “Change or remove API key” to enter it again.");
+  if(err instanceof Anthropic.PermissionDeniedError) return new Error("This API key isn't allowed to use Claude. Check it in the Anthropic Console.");
+  if(err instanceof Anthropic.RateLimitError) return new Error("Too many scans at once. Wait a minute and try again.");
+  if(err instanceof Anthropic.BadRequestError && /credit|billing|balance/i.test(err.message || "")) return new Error("Your Anthropic account is out of credit. Add credit in the Anthropic Console (Billing).");
+  if(err instanceof Anthropic.APIConnectionError) return new Error("Couldn't reach Anthropic. Check your internet connection.");
+  if(err instanceof Anthropic.APIError) return new Error("Claude had a problem: " + (err.message || "unknown error"));
+  return err;
+}
+
+// ---- turning Claude's answer into calendar events ----
+function tzOffsetMs(utcMs, tz){
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", {timeZone: tz, hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit"})
+    .formatToParts(new Date(utcMs)).map(x => [x.type, x.value]));
+  return Date.UTC(+p.year, p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - utcMs;
+}
+function zonedToUtcIso(date, time, tz){
+  const [y, m, d] = date.split("-").map(Number), [h, mi] = time.split(":").map(Number);
+  const wall = Date.UTC(y, m - 1, d, h, mi);
+  let utc = wall - tzOffsetMs(wall, tz);
+  utc = wall - tzOffsetMs(utc, tz);                          // settle across DST changes
+  return new Date(utc).toISOString().replace(/\.\d+Z$/, "Z");
+}
+const validTZ = tz => { try{ new Intl.DateTimeFormat("en-US", {timeZone: tz}); return true; }catch(e){ return false; } };
+const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
+const isTime = s => /^\d{1,2}:\d{2}$/.test(s || "");
+const pad = s => s && s.length === 4 ? "0" + s : s;
+
+function fromClaude(e){
+  return {
+    keep: true, title: e.title || "", date: isDate(e.start_date) ? e.start_date : today(),
+    start: isTime(e.start_time) ? pad(e.start_time) : "", endDate: isDate(e.end_date) ? e.end_date : "",
+    end: isTime(e.end_time) ? pad(e.end_time) : "",
+    tz: e.timezone && validTZ(e.timezone) ? e.timezone : deviceTZ,
+    venue: e.venue || "", address: e.address || "", host: e.host || "",
+    description: e.description || "", url: /^https?:\/\//i.test(e.url || "") ? e.url : (e.url ? "https://" + e.url.replace(/^\/+/, "") : ""),
+  };
+}
+
+const FIELDS = [
+  ["title","Event","text","full"], ["date","Date","date",""], ["start","Starts (blank = all day)","time",""],
+  ["end","Ends","time",""], ["endDate","End date (if different)","date",""],
+  ["venue","Venue","text","full"], ["address","Address","text","full"], ["host","Host","text","full"],
+  ["url","Link","url","full"], ["description","Notes","textarea","full"],
+];
+function renderFound(note){
+  showView("resultView");
+  if(!scanned.length){
+    $("found").innerHTML = `<p>No event found in that picture.${note ? " " + esc(note) : ""}</p>`;
+    $("scanAdd").hidden = true; return;
+  }
+  $("scanAdd").hidden = false;
+  $("found").innerHTML = (note ? `<p class="fine">${esc(note)}</p>` : "") +
+    `<p class="fine">Check the details and fix anything that's wrong.</p>` +
+    scanned.map((s, i) => `<div class="fcard" data-i="${i}">
+      ${scanned.length > 1 ? `<label class="hd"><input type="checkbox" data-f="keep"${s.keep ? " checked" : ""}> Event ${i + 1}</label>` : ""}
+      <div class="fgrid">${FIELDS.map(([f, label, type, cls]) => `<div class="${cls}"><label>${label}</label>${
+        type === "textarea" ? `<textarea data-f="${f}">${esc(s[f])}</textarea>`
+        : `<input type="${type}" data-f="${f}" value="${esc(s[f])}">`}</div>`).join("")}
+      </div>
+      ${s.tz !== deviceTZ ? `<p class="fine">Times are in ${esc(s.tz)}.</p>` : ""}
+    </div>`).join("");
+}
+$("found").addEventListener("input", ev => {
+  const card = ev.target.closest(".fcard"), f = ev.target.dataset.f; if(!card || !f) return;
+  scanned[+card.dataset.i][f] = ev.target.type === "checkbox" ? ev.target.checked : ev.target.value;
+});
+
+function toCalendarEvent(s, i){
+  const allDay = !s.start;
+  const ev = {
+    id: `scan-${Date.now()}-${i}`, name: s.title.trim() || "Event", allDay,
+    venue: s.venue.trim(), address: s.address.trim(), host: s.host.trim(),
+    description: s.description.trim(), links: s.url.trim() ? [{label: "Event page", url: s.url.trim()}] : [],
+  };
+  if(allDay){
+    ev.start = s.date; ev.end = isDate(s.endDate) && s.endDate > s.date ? s.endDate : null;
+  } else {
+    ev.start = zonedToUtcIso(s.date, s.start, s.tz);
+    if(s.end){
+      let endDate = s.endDate || s.date;
+      if(!s.endDate && s.end <= s.start) endDate = addDays(s.date, 1);   // e.g. 9pm-1am
+      ev.end = zonedToUtcIso(endDate, s.end, s.tz);
+    } else ev.end = null;
+  }
+  return ev;
+}
+$("scanAdd").onclick = () => {
+  const chosen = scanned.filter(s => s.keep);
+  if(!chosen.length){ alert("Tick at least one event."); return; }
+  if(chosen.some(s => !isDate(s.date))){ alert("Each event needs a date."); return; }
+  const events = chosen.map(toCalendarEvent);
+  $("scan").close();
+  deliverICS(events);
 };
 $("clear").onclick = () => { sel.clear(); store.set("selected", []); render(); };
 load();
